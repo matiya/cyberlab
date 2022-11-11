@@ -1,0 +1,36 @@
+#!/usr/bin/env ruby
+
+Vagrant.configure("2") do |config|
+
+  # Box
+  config.vm.box = "StefanScherer/windows_2019"
+
+  # Additional parameters to communicate with Windows
+  config.vm.hostname = "cpm"
+  config.vm.network :private_network, ip: "192.168.60.6"
+  config.vm.boot_timeout = 180
+  config.vm.communicator = "winrm"
+  config.winrm.port = 55985
+
+  # ssh
+  config.vm.network "forwarded_port", guest: 22, host: 2222,
+    auto_correct: true
+
+  # Customization
+  config.vm.provider "virtualbox" do |v|
+    v.name = "cpm"
+    v.gui = false
+    v.memory = 2048
+    v.customize ["modifyvm", :id, "--draganddrop", "bidirectional"] # Enables drag-and-drop between host and guest
+
+  end
+  config.vm.provision "ansible" do |ansible|
+    ansible.playbook = "setup_cpm.yml"
+    # Workaround for winrm_schem
+    # See: https://github.com/hashicorp/vagrant/issues/10765
+    ansible.host_vars = {
+      "default" => { "ansible_winrm_scheme" => "http" }
+    }
+  end
+
+end
