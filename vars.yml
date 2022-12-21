@@ -1,0 +1,67 @@
+---
+pas_version: 13.0
+debug_playbook: true
+vault_username: "administrator"
+vault_password: "Cyberark1"
+master_password: "Cyberark1"
+provider: "Virtualbox"
+ssh_pubkey:
+  "ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEA6NF8iallvQVp22WDkTkyrtvp9eWW6A8YVr+kz4TjGYe7gHzIw+niNltGEFHzD8+v1I2YJ6oXevct1YeS0o9HZyN1Q9qgCgzUFtdOKLv6IedplqoPkcmF0aYet2PkEDo3MlTBckFXPITAMzF8dJSIFo9D8HfdOV0IAdx4O7PtixWKn5y2hMNG0zQPyUecp4pzC6kivAIhyfHilFR61RGL+GPXQ2MWZWFYbAGjyiYJnAmCP3NOTd0jMZEnDkbUvxhMmBYSdETk1rRgm+R4LOzFUGaHqHDLKLX+FIPKcF96hrucXzcWyLbIbEgE98OHlnVYCzRdK8jlqm8tehUc9c9WhQ=="
+
+  ##################
+  # Vault Options #
+  ##################
+vault_ip: 192.168.60.4
+vault_hostname: vault
+dr_ip: 192.168.60.3
+dr_hostname: dr
+vault_port: 1858
+vault_package: "../../src/installers/Server-Rls-v{{pas_version}}.zip"
+# CyberArk does not (yet) distribute a Client v13.0
+client_package: "../../src/installers/Client-Rls-v12.6.zip"
+vault_installation_path: "C:\\CyberArk"
+vault_media: "C:\\_media\\Server-Rls-v{{pas_version}}"
+client_media: "C:\\_media\\Client-Rls-v12.6"
+vault_guid: "{BF1F0850-D1C7-11D3-8E83-0000E8EFAFE3}"
+vault_safes_path: "C:\\PrivateArk\\Safes"
+vault_license_path: "C:\\_media\\license"
+vault_operatorCD_path: "C:\\_media\\operator-cd"
+
+################
+# PVWA Options #
+################
+pvwa_hostname: pvwa
+pvwa_ip: 192.168.60.5
+pvwa_url: https://{{pvwa_hostname}}/PasswordVault
+
+pvwa_media: "C:\\_media\\Password Vault Web Access-Rls-v{{pas_version}}"
+pvwa_installation_path: "C:\\CyberArk"
+# Relative to the psm_setup_os.yml file
+pvwa_installers: "../../src/installers/Password Vault Web Access-Rls-v{{pas_version}}.zip"
+pvwa_iis_app_folder: "C:\\inetpub\\wwwroot\\{{ pvwa_app_name }}"
+pvwa_app_name: "PasswordVault"
+pvwa_auth_type: "CyberArk;LDAP;"
+pvwa_default_auth_method: "CyberArk"
+pvwa_guid: "{96B118DF-1B76-4CCE-8D51-731326034D51}"
+
+###############
+# CPM Options #
+###############
+cpm_hostname: cpm
+cpm_ip: 192.168.60.6
+cpm_media: "C:\\_media\\Central Policy Manager-Rls-v{{pas_version}}"
+cpm_installation_path: "C:\\CyberArk"
+cpm_username: "PasswordManager"
+
+###############
+# PSM Options #
+###############
+psm_hostname: psm
+psm_ip: 192.168.60.7
+psm_media: "C:\\_media\\Privileged Session Manager-Rls-v{{pas_version}}"
+psm_installation_path: "C:\\CyberArk"
+# Relative to the psm_setup_os.yml file
+psm_installers: "../../src/installers/Privileged Session Manager-Rls-v{{pas_version}}.zip"
+connect_with_rdp: true
+psm_installation_drive: "C:"
+psm_out_of_domain: true

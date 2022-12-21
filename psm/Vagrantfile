@@ -1,21 +1,42 @@
-#!/usr/bin/env ruby
-
+# -*- mode: ruby -*-
+#/usr/bin/env ruby
 
 Vagrant.configure("2") do |config|
 
   # Box
   config.vm.box = "StefanScherer/windows_2019"
 
-  # Additional parameters to communicate with Windows
-  config.vm.hostname = "psm"
-  config.vm.network :private_network, ip: "192.168.60.7"
-  config.vm.boot_timeout = 180
-  config.vm.communicator = "winrm"
-  config.winrm.port = 55985
+  # Setup a synced folder to the current path
+  config.vm.synced_folder ".", "/vagrant", disabled: false
+  # Take the users home and share it to the VM, in the path
+  # C:\home\<home name>
+  home = ENV['HOME'].gsub('\\', '/')
+  config.vm.synced_folder home, home
 
-  # ssh
-  config.vm.network "forwarded_port", guest: 22, host: 2222,
-    auto_correct: true
+  # Networking
+  config.vm.hostname = "psm"
+  config.vm.network "private_network", ip: "192.168.60.7"
+
+  # Additional settings to make it more robust
+  config.vm.guest = :windows
+  config.winrm.port = 55987 # Make sure that this is correct
+  config.winrm.max_tries = 20
+  config.vm.boot_timeout = 600
+  config.winrm.transport = :plaintext
+  config.vm.communicator = "winrm"
+  config.winrm.basic_auth_only = true
+  config.winrm.timeout = 300
+  config.vm.boot_timeout = 180
+  config.winrm.retry_limit = 20
+  config.windows.halt_timeout = 120
+
+  # Export WINRM
+  config.vm.network "forwarded_port", guest: 5985, host: 55987,id:"winrm",auto_correct: false
+
+  #Export RDP
+  config.vm.network "forwarded_port", guest: 3389, host: 8387, id: "rdp", auto_correct: true
+  # Export SSH
+  config.vm.network "forwarded_port", guest: 22, host: 2227, id:"ssh", auto_correct: true
 
   # Customization
   config.vm.provider "virtualbox" do |v|
@@ -23,7 +44,8 @@ Vagrant.configure("2") do |config|
     v.gui = false
     v.memory = 4096
     v.customize ["modifyvm", :id, "--draganddrop", "bidirectional"] # Enables drag-and-drop between host and guest
-
+    v.customize ["modifyvm", :id, "--clipboard", "bidirectional"]
+    v.customize ["modifyvm", :id, "--cpus", 2]
   end
   config.vm.provision "ansible" do |ansible|
     ansible.playbook = "setup_psm.yml"
@@ -33,5 +55,4 @@ Vagrant.configure("2") do |config|
       "default" => { "ansible_winrm_scheme" => "http" }
     }
   end
-
 end

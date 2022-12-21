@@ -1,0 +1,102 @@
+# -*- mode: ansible -*-
+- hosts: all
+  gather_facts: no
+  vars_files:
+    - ../../vars.yml
+  vars:
+    debug_playbook: true
+    ansible_ssh_port: 2224
+    ansible_connection: ssh
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    ansible_ssh_retries: 3
+    ansible_shell_type: powershell
+  tasks:
+    - name: Ensure that the windows host can be pinged (via SSH)
+      ansible.windows.win_ping:
+
+    - name: Install PrivateArk Client
+      ansible.windows.win_package:
+        path: C:\_media\Client-Rls-v12.6\Client\setup.exe
+        product_id: "{E9FE3D71-DF26-11D3-8656-0000E8EFAFE3}"
+        arguments: /s "{{ client_media }}\\Client\\setup.iss"
+
+    # FIXME: This never worked so well and probably is not necessary
+    # - name: >
+    #     Create a task to open the FW for SSH/RDP in 5 Min
+    #     (we don't want to get locked out )
+    #   # The surely is a better way to do this
+    #   community.windows.win_scheduled_task:
+    #     name: PatchFW-deb
+    #     description: Open SSH/RDP Port in dbparm.ini
+    #     actions:
+    #       - path: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+    #         arguments: -ExecutionPolicy Unrestricted -NonInteractive -File "C:\_media\script\patch_dbparm.ps1"
+    #     triggers:
+    #       - type: registration
+    #         repetition:
+    #           interval: PT5M
+    #           duration: PT10M
+    #           stop_at_duration_end: true
+    #       - type: boot
+    #         delay: PT3M
+    #     username: SYSTEM
+    #     logon_type: service_account
+    #     state: present
+    #     run_level: highest
+    #     restart_count: 3
+    #     restart_interval: PT1M
+    #     start_when_available: true
+    #     enabled: True
+
+    # # FIXME: Figure out some condition to skip it, maybe collect facts
+    - name: Run vault install
+      ansible.windows.win_powershell:
+        script: >
+          {{ vault_media }}\\setup.exe
+          /s "{{vault_media}}\\setup.iss"
+          /f2 "C:\\vagrant\\logs\\setup.log"
+      become: yes
+      become_method: runas
+      become_user: vagrant
+      # the next 4 settings are there because after hardening
+      # the task gets interrupted and it probably won't reponde
+      # but the following tasks should still be able to run and
+      # detect wether the vault was installed
+      async: 300
+      poll: 60
+      ignore_errors: True
+      ignore_unreachable: True
+
+    - name: Copy edited dbparm.ini file
+      ansible.windows.win_copy:
+        src: ../../src/vault/config/dbparm.ini
+        dest: C:\CyberArk\PrivateArk\Server\Conf\dbparm.ini
+
+    # FIXME: Do this in another step
+    - name: Check if Vault was installed (present in appwiz)
+      ansible.windows.win_reg_stat:
+        path: HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{{ vault_guid }}
+        name: Publisher
+      register: vault_appwiz_info_32b
+
+    - name: Print what we found
+      ansible.builtin.debug:
+        msg: "{{ vault_appwiz_info_32b }}"
+
+    - name: Check that no errors ocurred in installer
+      community.windows.win_lineinfile:
+        path: "{{ vault_media }}\\setup.log"
+        line: "ResultCode=0"
+        state: present
+
+    - name: Check that the server is up
+      ansible.windows.win_powershell:
+        script: |
+          $italog = Get-Content {{ vault_installation_path }}\\PrivateArk\\Server\\Logs\\italog.log
+          $italog = ($italog | Select-String ITADB313I | Select-Object -Last 1).ToString()
+          if(not $italog.Contains("is up")){
+          Write-Error "Server is not up. Check manually." -ErrorAction Stop
+          exit -1 }
+
+    - name: Reboot after install
+      win_reboot:

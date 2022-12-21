@@ -1,0 +1,4 @@
+---
+- import_playbook: tasks/vault_setup_os.yml
+- import_playbook: tasks/vault_prerequisites.yml
+- import_playbook: tasks/vault_install.yml
