@@ -1,0 +1,4 @@
+The following files are needed:
+- recpub.key
+- server.key
+- rndbase.dat

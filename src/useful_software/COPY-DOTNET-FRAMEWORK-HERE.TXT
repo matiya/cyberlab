@@ -1,0 +1,8 @@
+Download from here:
+
+https://dotnet.microsoft.com/en-us/download/dotnet-framework/net48
+
+I could have installed it directly via chocolatey, but since it needs to be installed
+for every server I think it is more efficient and faster to do it once.
+
+If you need additional software, also place it here and it will be copied to every server.

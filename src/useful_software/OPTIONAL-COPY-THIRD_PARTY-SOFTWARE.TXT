@@ -1,0 +1,3 @@
+If you need additional software, also place it here and it will be copied to every server.
+
+There is also one stage in the setup_os.yml that installs third party software like notepad++ or powershell 7.

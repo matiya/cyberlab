@@ -1,0 +1,3 @@
+For obvious reasons, there should be no copyrighted information in this repo.
+Simply place here the installers as downloaded from the CyberArk marketplace.
+Make sure to update the version in the vars.yml file.
