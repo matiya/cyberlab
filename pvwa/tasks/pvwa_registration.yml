@@ -1,0 +1,99 @@
+# -*- eval: (ansible) -*-
+---
+- hosts: all
+  gather_facts: false
+  vars_files:
+    - ../../vars.yml
+  vars:
+    - pvwa_installationautomation: "{{pvwa_media}}\\InstallationAutomation"
+    - pvwa_status_hardening: "C:\\vagrant\\logs\\hardening.status"
+    - pvwa_upgrade: false
+    - pvwa_enable_full_version: true
+    - pvwa_enable_mobile_version: false
+  tasks:
+    - name: Assign PVWA IP
+      ansible.builtin.set_fact:
+        pvwa_url: "https://{{ pvwa_hostname }}/PasswordVault"
+      when: pvwa_url is not defined
+
+    - name: Stop report service
+      ansible.windows.win_service:
+        name: "CyberArk Scheduled Tasks"
+        state: stopped
+
+    - name: Create configure instance input json
+      ansible.windows.win_copy:
+        content: "{{ lookup('template', '../templates/ConfigureInstanceInput.json.j2') | to_nice_json }}"
+        dest: '{{ pvwa_installation_path }}\Env\ConfigureInstanceInput.json'
+
+    - name: Configure instance (PVWADeploy)
+      ansible.windows.win_powershell:
+        chdir: "{{ pvwa_installationautomation}}\\Registration"
+        script: |
+          .\PVWADeploy.ps1 -Action ConfigureInstance -ParametersFile "{{ pvwa_installation_path }}\Env\ConfigureInstanceInput.json" -configFilesPath "{{ pvwa_installation_path }}"
+      register: pvwa_deploy_output
+
+    - name: Fail task if deploy script failed
+      ansible.builtin.fail:
+        msg: "failed to run PVWADeploy.ps1 ConfigureInstance. Please refer to {{ pvwa_installation_path }}\\Env\\Log\\ConfigureInstance.log for more information."
+      when:
+        - (pvwa_deploy_output.host_out is defined)
+        - (pvwa_deploy_output.host_out.find('Failed to run') != -1)
+
+    - name: Create configure vault input json
+      vars:
+        - pvwa_upgrade: false
+        - pvwa_default_mobile_auth_method: "CyberArk"
+      ansible.windows.win_copy:
+        content: "{{ lookup('template', '../templates/ConfigureVaultInput.json.j2') | to_nice_json }}"
+        dest: '{{ pvwa_installation_path }}\Env\ConfigureVaultInput.json'
+
+    - name: Configure Vault (PVWADeploy)
+      ansible.windows.win_powershell:
+        chdir: "{{ pvwa_installationautomation}}\\Registration"
+        script: |
+          $logPath = "C:\vagrant\logs\pvwa_registration.status"
+          $secure_vault_password_object = ConvertTo-SecureString '{{ vault_password }}' -AsPlainText -Force
+          .\PVWADeploy.ps1 -Action ConfigureVault -ParametersFile "{{ pvwa_installation_path }}\Env\ConfigureVaultInput.json" -configFilesPath "{{ pvwa_installation_path }}" -VaultSecurePassword $secure_vault_password_object
+          $Result = Get-Content $logPath -Raw | ConvertFrom-Json
+          Write-Host $Result
+      register: pvwa_deploy_output
+
+    - name: Fail task if deploy script failed
+      ansible.builtin.fail:
+        msg: "failed to run PVWADeploy.ps1 ConfigureVault. Please refer to {{ pvwa_installation_path }}\\Env\\Log\\ConfigureInstance.log for more information."
+      when:
+        - (pvwa_deploy_output.host_out is defined)
+        - (pvwa_deploy_output.host_out.find('Failed to run') != -1)
+
+    - name: Create register instance input json
+      ansible.windows.win_copy:
+        content: "{{ lookup('template', '../templates/RegisterInstanceInput.json.j2') | to_nice_json }}"
+        dest: '{{ pvwa_installation_path }}\Env\RegisterInstanceInput.json'
+
+    - name: Register instance (PVWADeploy)
+      ansible.windows.win_powershell:
+        chdir: "{{ pvwa_installationautomation }}\\Registration"
+        script: |
+          $secure_vault_password_object = ConvertTo-SecureString '{{ vault_password }}' -AsPlainText -Force
+          .\PVWADeploy.ps1 -Action RegisterInstance -ParametersFile "{{ pvwa_installation_path }}\Env\RegisterInstanceInput.json" -configFilesPath "{{ pvwa_installation_path }}" -VaultSecurePassword $secure_vault_password_object
+      register: pvwa_deploy_output
+
+    - name: Copy registration log to host
+      ansible.windows.win_powershell:
+        script: |
+          $logPath = "{{pvwa_installationautomation}}\\Registration\\Script.log"
+          cp $logPath C:\vagrant\logs\pvwa_registration.log
+      register: log_result
+
+    - name: Fail task if deploy script failed
+      ansible.builtin.fail:
+        msg: "failed to run PVWADeploy.ps1 RegisterIntance. Please refer to {{ pvwa_installation_path }}\\Env\\Log\\ConfigureInstance.log for more information."
+      when:
+        - (pvwa_deploy_output.host_out is defined)
+        - (pvwa_deploy_output.host_out.find('Failed to run') != -1)
+
+    - name: IIS Restart
+      ansible.windows.win_shell: |
+        iisreset /stop
+        IISRESET /START

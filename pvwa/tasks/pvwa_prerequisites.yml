@@ -1,0 +1,73 @@
+# -*- eval: (ansible) -*-
+---
+- hosts: all
+  gather_facts: false
+  vars_files:
+    - ../../vars.yml
+  vars:
+    - pvwa_installationautomation: "{{pvwa_media}}\\InstallationAutomation"
+    - pvwa_status_prerequisites: "C:\\vagrant\\logs\\pvwa_prerequisites.status"
+    - pvwa_log_prerequisites: "C:\\vagrant\\logs\\pvwa_prerequisites.log"
+  tasks:
+    - name: Unpack installers
+      ansible.windows.win_powershell:
+        script: |
+          ls ".\Password Vault Web Access-Rls-v{{pas_version}}.zip" | Expand-Archive
+        creates: "{{pvwa_media}}"
+        chdir: C:\_media\
+
+    - name: Install IIS
+      # This should be installed by the PS Script,
+      # but it leads to a failure if it is missing.
+      ansible.windows.win_feature:
+        name: "web-server"
+        state: present
+        restart: yes
+        include_sub_features: yes
+        include_management_tools: yes
+
+    - name: Run PVWA prerequisites
+      ansible.windows.win_powershell:
+        chdir: "{{pvwa_installationautomation}}"
+        script: |
+          try {
+              $Action = .\PVWA_Prerequisites.ps1
+              $filePath = '{{ pvwa_status_prerequisites }}'
+              $Action | Out-File -FilePath $filePath
+              $Result = Get-Content $filePath -Raw | ConvertFrom-Json
+              if ($Result.isSucceeded -ne 0) {
+                Write-Error "PVWA Prerequisites has failed: $Result.errorData"
+                exit 1
+              } else {
+                exit 0
+              }
+          } catch {
+              Write-Error "Error occured: $error"
+              exit 1
+          }
+
+    - name: Get log path for prerequisites
+      ansible.windows.win_powershell:
+        script: |
+          $Result = Get-Content "{{ pvwa_status_prerequisites }}"
+          Write-Host $Result
+      register: log_result
+
+    - name: Fetch prerequisites log from path
+      ansible.builtin.fetch:
+        src: "{{ item.logPath }}"
+        dest: "../logs/"
+        flat: true
+      with_items:
+        - "{{ log_result.host_out | from_json }}"
+
+    # FIXME: There is a bug in the v12.6 of the script PVWA_DisableIPV6.psm1
+    # in the query:
+    # $Display_Names = Get-NetAdapterAdvancedProperty -Name $line.name `
+    # | Where-Object {$_.DisplayName -like '*(IPv6)*' -or $_.DisplayName -like '*Virtual Machine*'}
+    # if it doesn't find a value that matches the query, the variable is empty
+    # and then it tries to call Set-NetAdapterBinding with an empty name.
+    # - name: Check prerequisites status
+    #   ansible.builtin.fail:
+    #     msg: "Prerequisites failed: {{ (log_result['host_out']| from_json)['errorData'] }}"
+    #   # when: (log_result['host_out']| from_json)['isSucceeded']

@@ -30,8 +30,9 @@ Vagrant.configure("2") do |config|
   config.winrm.retry_limit = 20
   config.windows.halt_timeout = 120
 
-  # Export WINRM
+  # Export WINRM (and WINRM(s))
   config.vm.network "forwarded_port", guest: 5985, host: 55986,id:"winrm",auto_correct: false
+  config.vm.network "forwarded_port", guest: 5986, host: 56986,id:"winrms",auto_correct: false
   #Export RDP
   config.vm.network "forwarded_port", guest: 3389, host: 8386, id: "rdp", auto_correct: true
   # Export SSH

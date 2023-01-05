@@ -1,0 +1,19 @@
+# -*- mode: ansible -*-#
+---
+- import_playbook: tasks/pvwa_clean.yml
+- import_playbook: tasks/pvwa_setup_os.yml
+- import_playbook: tasks/pvwa_prerequisites.yml
+- import_playbook: tasks/pvwa_install.yml
+- import_playbook: tasks/pvwa_hardening.yml
+- import_playbook: tasks/pvwa_registration.yml
+
+- hosts: all
+  gather_facts: false
+  vars:
+    - pvwa_installation_path: "C:\\CyberArk"
+    - pvwa_media: "C:\\_media\\Password Vault Web Access-Rls-v{{pas_version}}"
+    - pvwa_iis_app_folder: "C:\\inetpub\\wwwroot\\{{ pvwa_app_name }}"
+    - pvwa_app_name: "PasswordVault"
+    - pvwa_auth_type: "CyberArk;LDAP;"
+    - pvwa_default_auth_method: "CyberArk"
+    - pvwa_guid: "{96B118DF-1B76-4CCE-8D51-731326034D51}"

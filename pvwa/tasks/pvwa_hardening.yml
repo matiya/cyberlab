@@ -1,0 +1,53 @@
+# -*- eval: (ansible) -*-
+---
+- hosts: all
+  gather_facts: false
+  vars_files:
+    - ../../vars.yml
+  vars:
+    - pvwa_installationautomation: "{{pvwa_media}}\\InstallationAutomation"
+    - pvwa_status_hardening: "C:\\vagrant\\logs\\hardening.status"
+  tasks:
+    # - name: Check if hardening was executed
+    #   ansible.windows.win_powershell:
+    #     script: |
+    #       $Result = (Get-Content $logPath | ConvertFrom-Json)
+    #       Write-Host $Result.isSucceeded
+    #   register: log_result
+
+    - name: Run PVWA hardening
+      ansible.windows.win_powershell:
+        chdir: "{{ pvwa_installationautomation }}"
+        script: |
+          $ErrorActionPreference = "SilentlyContinue"
+          $Action = .\PVWA_Hardening.ps1
+          $logPath = "{{ pvwa_status_hardening }}"
+          $Action | Out-File -FilePath $logPath
+          $Result = Get-Content $logPath -Raw | ConvertFrom-Json
+          if ($Result.isSucceeded -ne 0) {
+            Write-Error "PVWA Hardening failed: $Result.errorData"
+            exit 1
+          } else {
+            exit 0
+          }
+      # when: ( log_result.host_out | int ) != 0
+
+    - name: Get log path for hardening
+      ansible.windows.win_powershell:
+        script: |
+          $Result = Get-Content "{{ pvwa_status_hardening }}"
+          Write-Host $Result
+      register: log_result
+
+    - name: Fetch hardening log from path
+      ansible.builtin.fetch:
+        src: "{{ item.logPath }}"
+        dest: "../logs/"
+        flat: true
+      with_items:
+        - "{{ log_result.host_out | from_json }}"
+
+    - name: Check hardening status
+      ansible.builtin.fail:
+        msg: "Hardening failed: {{ (log_result['host_out']| from_json)['errorData'] }}"
+      when: (log_result['host_out']| from_json)['isSucceeded']

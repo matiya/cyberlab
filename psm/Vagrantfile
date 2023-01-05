@@ -32,6 +32,7 @@ Vagrant.configure("2") do |config|
 
   # Export WINRM
   config.vm.network "forwarded_port", guest: 5985, host: 55987,id:"winrm",auto_correct: false
+  config.vm.network "forwarded_port", guest: 5986, host: 56987,id:"winrms",auto_correct: false
 
   #Export RDP
   config.vm.network "forwarded_port", guest: 3389, host: 8387, id: "rdp", auto_correct: true

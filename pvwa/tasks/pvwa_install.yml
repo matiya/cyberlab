@@ -1,0 +1,79 @@
+# -*- eval: (ansible) -*-
+---
+- hosts: all
+  gather_facts: false
+  vars_files:
+    - ../../vars.yml
+  vars:
+    - pvwa_installationautomation: "{{pvwa_media}}\\InstallationAutomation"
+    - pvwa_status_installation: "C:\\vagrant\\logs\\pvwa_installation.status"
+    - pvwa_log_installation: "C:\\vagrant\\logs\\pvwa_installation.log"
+  tasks:
+    - name: Modify xml config file
+      ansible.windows.win_powershell:
+        script: |
+          try {
+          $filePath = "{{ pvwa_installationautomation }}\\Installation\\InstallationConfig.xml"
+          $xml = [xml](Get-Content $filePath)
+          $step1 = $xml.SelectSingleNode("//Parameter[@Name = 'PVWAInstallDirectory']")
+          $step1.Value = "{{ pvwa_installation_path }}"
+          $step2 = $xml.SelectSingleNode("//Parameter[@Name = 'PVWAApplicationDirectory']")
+          $step2.Value = "{{ pvwa_iis_app_folder }}"
+          $step3 = $xml.SelectSingleNode("//Parameter[@Name = 'PVWAApplicationName']")
+          $step3.Value = "{{ pvwa_app_name }}"
+          $step4 = $xml.SelectSingleNode("//Parameter[@Name = 'PVWAAuthenticationList']")
+          $step4.Value = "{{ pvwa_auth_type }}"
+          $xml.Save($filePath)
+          exit 0
+          }
+          catch {
+          Write-Output "Error occured during SetAtrributeInXML"
+          exit 1
+          }
+
+    # FIXME: Do this in another step
+    - name: Check if PVWA is already installed (present in appwiz)
+      ansible.windows.win_reg_stat:
+        path: HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{{ pvwa_guid }}
+        name: Publisher
+      register: pvwa_appwiz_info_32b
+
+    - name: Run PVWA installation
+      ansible.windows.win_powershell:
+        chdir: "{{ pvwa_installationautomation }}\\Installation"
+        script: |
+          $Action = .\PVWAInstallation.ps1
+          $logPath = "{{ pvwa_status_installation }}"
+          $Action | Out-File -FilePath $logPath
+          $Result = Get-Content $logPath -Raw | ConvertFrom-Json
+          if ($Result.isSucceeded -ne 0) {
+             Write-Error "PVWA Installation has failed"
+            exit 1
+          } else {
+            exit 0
+          }
+      # when: not (pvwa_appwiz_info_32b.exists)
+
+    - name: Get log path for installation
+      ansible.windows.win_powershell:
+        script: |
+          $Result = Get-Content "{{ pvwa_status_installation }}"
+          Write-Host $Result
+      register: log_result
+
+    - name: Print installation - Status
+      ansible.builtin.debug:
+        msg: "Prereqs output is: {{log_result}}"
+
+    - name: Fetch installation log from path
+      ansible.builtin.fetch:
+        src: "{{ item.logPath }}"
+        dest: "../logs/installation"
+        flat: true
+      with_items:
+        - "{{ log_result.host_out | from_json }}"
+
+    - name: Check install status
+      ansible.builtin.fail:
+        msg: "Install failed: {{ (log_result['host_out']| from_json)['errorData'] }}"
+      when: (log_result['host_out']| from_json)['isSucceeded']

@@ -1,0 +1,14 @@
+---
+- hosts: all
+  gather_facts: no
+  vars_files:
+    - ../../vars.yml
+  vars:
+    debug_playbook: true
+  tasks:
+    - name: Logon to CyberArk Vault using WebServices
+      cyberark.pas.cyberark_authentication:
+        api_base_url: "{{ pvwa_url }}"
+        username: "{{ vault_username  }}"
+        password: "{{ vault_password }}"
+        use_shared_logon_authentication: no
