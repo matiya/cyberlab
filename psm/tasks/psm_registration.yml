@@ -1,0 +1,107 @@
+---
+# tasks file for psm registration
+- hosts: all
+  gather_facts: false
+  vars_files:
+    - ../../vars.yml
+  vars:
+    - psm_installationautomation: "{{psm_media}}\\InstallationAutomation"
+    - psm_registrationtool_folder: "{{psm_installationautomation}}\\Registration"
+    - psm_status_registration: "C:\\Windows\\Temp\\psm_registration.status"
+    - psm_service_name: "CyberArk Privileged Session Manager"
+  tasks:
+    - name: Update PSM registration configuration file
+      ansible.windows.win_powershell:
+        script: |
+          try {
+            $filePath = "{{ psm_registrationtool_folder }}\\RegistrationConfig.xml"
+            $xml = [xml](Get-Content $filePath)
+            $step1 = $xml.SelectSingleNode("//Parameter[@Name = 'vaultip']")
+            $step1.Value = "{{ vault_ip }}"
+            $step2 = $xml.SelectSingleNode("//Parameter[@Name = 'vaultport']")
+            $step2.Value = "{{ vault_port }}"
+            $step3 = $xml.SelectSingleNode("//Parameter[@Name = 'vaultusername']")
+            $step3.Value = "{{ vault_username }}"
+            $step4 = $xml.SelectSingleNode("//Parameter[@Name = 'accepteula']")
+            $step4.Value = "yes"
+            $xml.Save($filePath)
+            exit 0
+          } catch {
+            Write-Error "Error occured While updating registration configuration file"
+            exit 1
+          }
+      when: dr_vault_ip is not defined
+
+    - name: Update PSM registration configuration file
+      ansible.windows.win_powershell:
+        script: |
+          try {
+            $filePath = "{{ psm_registrationtool_folder }}\\RegistrationConfig.xml"
+            $xml = [xml](Get-Content $filePath)
+            $step1 = $xml.SelectSingleNode("//Parameter[@Name = 'vaultip']")
+            $step1.Value = "{{ vault_ip }},{{ dr_vault_ip }}"
+            $step2 = $xml.SelectSingleNode("//Parameter[@Name = 'vaultport']")
+            $step2.Value = "{{ vault_port }}"
+            $step3 = $xml.SelectSingleNode("//Parameter[@Name = 'vaultusername']")
+            $step3.Value = "{{ vault_username }}"
+            $step4 = $xml.SelectSingleNode("//Parameter[@Name = 'accepteula']")
+            $step4.Value = "yes"
+            $xml.Save($filePath)
+            exit 0
+          } catch {
+            Write-Error "Error occured While updating registration configuration file"
+            exit 1
+          }
+      when: dr_vault_ip is defined
+
+    - name: Run PSM registration
+      ansible.windows.win_powershell:
+        creates: C:\CyberArk\PSM\Vault\psmapp.cred
+        chdir: "{{ psm_installationautomation}}"
+        script: |
+          $secStrObj = ConvertTo-SecureString -String "{{ vault_password }}" -Force -AsPlaintext
+          $Action = .\Execute-Stage.ps1 "{{ psm_registrationtool_folder }}\\RegistrationConfig.xml" -silentMode "Silent" -displayJson -spwdObj $secStrObj
+          $Action | Out-File -FilePath "{{ psm_status_registration }}"
+          $Result = Get-Content "{{ psm_status_registration }}" -Raw | ConvertFrom-Json
+          if ($Result.isSucceeded -ne 0) {
+            Write-Error "Error while executing PSM Registration $Result.ErrorData"
+            exit 1
+          } else {
+            exit 0
+          }
+          Write-Host $Result.isSucceeded
+
+    - name: Get log path for registration
+      ansible.windows.win_powershell:
+        script: |
+          $Result = Get-Content "{{ psm_status_registration }}"
+          Write-Host $Result
+      register: log_result
+
+    - name: Fetch registration log from path
+      ansible.builtin.fetch:
+        src: "{{ item.logPath }}"
+        dest: "../logs/"
+        flat: true
+      with_items:
+        - "{{ log_result.host_out | from_json }}"
+
+    - name: Check registration status
+      ansible.builtin.fail:
+        msg: "Registration failed: {{ (log_result['host_out']| from_json)['errorData'] }}"
+      when: (log_result['host_out']| from_json)['isSucceeded']
+
+    - name: Start PSM service & set to auto
+      ansible.windows.win_service:
+        name: "{{ psm_service_name }}"
+        start_mode: auto
+        state: started
+
+    - name: check if PSM service is running
+      ansible.windows.win_service:
+        name: "{{ psm_service_name }}"
+      register: psm_service_info
+
+    - ansible.builtin.set_fact:
+        psm_registered: true
+      when: psm_service_info.state == "running"

@@ -1,0 +1,8 @@
+# -*- mode:ansible -*-
+---
+- import_playbook: tasks/psm_setup_os.yml
+- import_playbook: tasks/psm_prerequisites.yml
+- import_playbook: tasks/psm_install.yml
+- import_playbook: tasks/psm_postinstall.yml
+- import_playbook: tasks/psm_hardening.yml
+- import_playbook: tasks/psm_registration.yml

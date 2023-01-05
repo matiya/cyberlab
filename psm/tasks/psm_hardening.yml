@@ -1,0 +1,96 @@
+---
+# tasks file for psm hardening
+- hosts: all
+  gather_facts: false
+  vars_files:
+    - ../../vars.yml
+  vars:
+    - psm_installationautomation: "{{psm_media}}\\InstallationAutomation"
+    - psm_status_hardening: "C:\\Windows\\Temp\\psm_hardening.status"
+    - psm_log_hardening: "C:\\Windows\\Temp\\psm_hardening.log"
+    - psm_service_name: "Cyber-Ark Privileged Session Manager"
+  tasks:
+    - name: Check psm_out_of_domain is boolean
+      ansible.builtin.fail:
+        msg: "psm_out_of_domain should be true/false, current type is {{ psm_out_of_domain | type_debug }}"
+      when: psm_out_of_domain | type_debug != 'bool'
+
+    - name: Update PSM out-of-domain parameter
+      ansible.windows.win_powershell:
+        script: |
+          try {
+            $psm_domain = if('{{ psm_out_of_domain }}' -eq 'true') {"Yes"} else {"No"}
+            $filePath = "{{ psm_installationautomation }}\\Hardening\\HardeningConfig.xml"
+            $xml = [xml](Get-Content $filePath)
+            $step1 = $xml.SelectSingleNode("//Step[@Name = 'OutOfDomainHardening']")
+            $step1.Enable = $psm_domain
+            $xml.Save($filePath)
+            exit 0
+          } catch {
+            Write-Error "Error occured setting out-of-domain parameter"
+            exit 1
+          }
+
+    - name: Run PSM hardening
+      ansible.windows.win_powershell:
+        chdir: "{{ psm_installationautomation }}"
+        script: |
+          $Action = .\Execute-Stage.ps1 "{{ psm_installationautomation }}\Hardening\HardeningConfig.xml" -silentMode "Silent" -displayJson -delayedrestart
+          $Action | Out-File -FilePath "{{ psm_status_hardening }}"
+          $Result = Get-Content "{{ psm_status_hardening }}" -Raw | ConvertFrom-Json
+          if ($Result.isSucceeded -ne 0) {
+            Write-Error "PSM Hardening failed: $Result.errorData"
+            exit 1
+            } else {
+            exit 0
+          }
+      become: yes
+      become_method: runas
+      become_user: Administrator
+
+    - name: Get log path for hardening
+      ansible.windows.win_powershell:
+        script: |
+          $Result = Get-Content "{{ psm_status_hardening }}"
+          Write-Host $Result
+      register: log_result
+
+    - name: Fetch hardening log from path
+      ansible.builtin.fetch:
+        src: "{{ item.logPath }}"
+        dest: "../logs/"
+        flat: true
+      with_items:
+        - "{{ log_result.host_out | from_json }}"
+
+    - name: Check hardening status
+      ansible.builtin.fail:
+        msg: "Hardening failed: {{ (log_result['host_out']| from_json)['errorData'] }}"
+      when: (log_result['host_out']| from_json)['isSucceeded']
+
+    - name: Reboot when PSM hardening requires reboot
+      ansible.windows.win_reboot:
+        reboot_timeout: 300
+      with_items:
+        - "{{ log_result.host_out | from_json }}"
+      when:
+        - item.restartRequired
+
+    - name: Validate PSM hardening
+      ansible.windows.win_powershell:
+        script: |
+          $policyInfPath = "{{ psm_installationautomation }}\\group-policy.inf"
+          $policyLogPath = "{{ psm_installationautomation }}\\group-policy.log"
+          secedit /export /cfg "$policyInfPath" /log "$policyLogPath"
+          if (Test-Path "$policyInfPath") {
+            $stringFound = Select-String -Path "$policyInfPath" -Pattern 'PSMShadowUsers'
+            if ($stringFound -ne $null) {
+              exit 0
+            }
+          }
+          Write-Error "PSMShadowUsers couldn't be hardened. See. $policyLogPath"
+          exit 1
+      when: psm_out_of_domain
+
+    - ansible.builtin.set_fact:
+        psm_hardened: true

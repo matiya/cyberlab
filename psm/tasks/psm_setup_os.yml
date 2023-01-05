@@ -1,0 +1,173 @@
+---
+- hosts: all
+  gather_facts: no
+  vars_files:
+    - ../../vars.yml
+  vars:
+    debug_playbook: true
+  tasks:
+    - name: Ensure user CYA_ADM is present
+      ansible.windows.win_user:
+        name: CYA_ADM
+        password: Cyberark1
+        state: present
+        password_never_expires: true
+        groups:
+          - Administrators
+
+    - name: Setup hostfile
+      community.windows.win_hosts:
+        state: present
+        canonical_name: "{{ item.name }}"
+        ip_address: "{{ item.ip }}"
+      with_items:
+        - { ip: "{{vault_ip}}", name: " {{vault_hostname}}" }
+        - { ip: "{{dr_ip}}", name: " {{dr_hostname}}" }
+        - { ip: "{{pvwa_ip}}", name: " {{pvwa_hostname}}" }
+        - { ip: "{{cpm_ip}}", name: " {{cpm_hostname}}" }
+        - { ip: "{{psm_ip}}", name: " {{psm_hostname}}" }
+
+    - name: Enable AutoAdminLogon
+      ansible.windows.win_regedit:
+        path: HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon
+        name: AutoAdminLogon
+        data: 1
+
+    - name: Set default username for AutoAdminLogon
+      ansible.windows.win_regedit:
+        path: HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon
+        name: DefaultUsername
+        data: "{{ ansible_user }}"
+
+    - name: Set default password for AutoAdminLogon
+      ansible.windows.win_regedit:
+        path: HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon
+        name: DefaultPassword
+        data: "{{ ansible_password }}"
+
+    - name: Copy Installers
+      ansible.windows.win_copy:
+        src: "{{psm_installers}}"
+        dest: C:\_media\
+
+    - name: |
+        Copy useful software and scripts
+        (including offline installer for dotnet 4.8)
+      ansible.windows.win_copy:
+        src: ../../src/useful_software
+        dest: C:\_media\
+
+    - name: Verify dotnet version
+      ansible.windows.win_powershell:
+        script: |
+          (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full").Release
+      register: dotnetversion
+
+    - name: Install dotnet 4.8
+      ansible.windows.win_package:
+        path: C:\_media\useful_software\ndp48-x86-x64-allos-enu.exe
+        arguments: /q /norestart
+      register: dotnet_install
+      when: (dotnetversion.output.pop(0) | int) < 528040
+
+    - name: Install visual c++ redistributable
+      chocolatey.chocolatey.win_chocolatey:
+        name:
+          - vcredist140
+        state: latest
+
+    - name: Install virtualbox-guest-additions
+      chocolatey.chocolatey.win_chocolatey:
+        name:
+          - virtualbox-guest-additions-guest.install
+        state: latest
+      when: provider == "Virtualbox"
+
+    - name: install the Win32-OpenSSH service
+      chocolatey.chocolatey.win_chocolatey:
+        name: openssh
+        package_params: /SSHServerFeature
+        state: present
+
+    - name: set the default shell to PowerShell
+      ansible.windows.win_regedit:
+        path: HKLM:\SOFTWARE\OpenSSH
+        name: DefaultShell
+        data: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+        type: string
+        state: present
+
+    - name: Add SSH Authorized Keys
+      community.windows.win_lineinfile:
+        path: C:\ProgramData\ssh\administrators_authorized_keys
+        line: "{{ ssh_pubkey }}"
+        create: true
+      when: ssh_pubkey is defined
+
+    - name: Install misc software utilities
+      chocolatey.chocolatey.win_chocolatey:
+        name:
+          - sysinternals
+          - notepadplusplus
+          - powershell-core
+          - bginfo
+          - wireshark
+          - caffeine
+          - procexp
+          - autoit
+        state: latest
+      # when: not debug_playbook | bool
+
+    - name: Verify dotnet version
+      ansible.windows.win_powershell:
+        script: |
+          (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full").Release
+      register: dotnetversion
+
+    - name: Print dotnet version
+      ansible.builtin.debug:
+        msg: dotnet version is {{dotnetversion.output}}. It should be equal or bigger than 528040.
+
+    - name: Install all security, critical updates. Reboot as needed.
+      ansible.windows.win_updates:
+        category_names:
+          - SecurityUpdates
+          - CriticalUpdates
+          - UpdateRollups
+        reboot: true
+      when: not debug_playbook | bool
+
+    - name: Make sure that the hostname is correct
+      ansible.windows.win_hostname:
+        name: "{{psm_hostname}}"
+      register: res
+
+    - name: Set the region format to German
+      community.windows.win_region:
+        format: de-DE
+      register: res_region
+
+    - name: Set timezone to W. Europe Standard Time (GMT+01:00)
+      community.windows.win_timezone:
+        timezone: W. Europe Standard Time
+
+    - name: Set the keyboard to German
+      ansible.windows.win_powershell:
+        script: |
+          $ll = New-WinUserLanguageList -Language "de-DE"
+          Set-WinUserLanguageList $ll -Force
+
+    - name: Ensure that RDP is enabled and NLA disabled
+      ansible.windows.win_powershell:
+        script: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          (Get-WmiObject -class "Win32_TSGeneralSetting" -Namespace root\cimv2\terminalservices  -Filter "TerminalName='RDP-tcp'").SetUserAuthenticationRequired(0)
+
+    - name: Reboot if needed
+      ansible.windows.win_reboot:
+      when: >
+        res.reboot_required or
+        res_region.restart_required or
+        (dotnet_install.reboot_required is defined and
+        dotnet_install.reboot_required | bool)
