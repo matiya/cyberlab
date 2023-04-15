@@ -1,8 +1,11 @@
 ---
 pas_version: 13.0
 debug_playbook: true
+accept_eula: true
 vault_username: "administrator"
-vault_password: "Cyberark1"
+# vault_password: "Cyberark1"
+# Because some ansible scripts require the vault_password to be defined
+# as a secure string, this variable is set in the individual components
 master_password: "Cyberark1"
 provider: "Virtualbox"
 ssh_pubkey:
@@ -50,6 +53,7 @@ pvwa_guid: "{96B118DF-1B76-4CCE-8D51-731326034D51}"
 cpm_hostname: cpm
 cpm_ip: 192.168.60.6
 cpm_media: "C:\\_media\\Central Policy Manager-Rls-v{{pas_version}}"
+cpm_zip_file_path: "../../src/installers/Central Policy Manager-Rls-v{{pas_version}}.zip"
 cpm_installation_path: "C:\\CyberArk"
 cpm_username: "PasswordManager"
 

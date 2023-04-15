@@ -34,6 +34,7 @@
         - { ip: "{{pvwa_ip}}", name: " {{pvwa_hostname}}" }
         - { ip: "{{cpm_ip}}", name: " {{cpm_hostname}}" }
         - { ip: "{{psm_ip}}", name: " {{psm_hostname}}" }
+        - { ip: "{{conjur_ip}}", name: " {{conjur_hostname}}" }
 
     - name: Enable AutoAdminLogon
       ansible.windows.win_regedit:
@@ -101,9 +102,11 @@
           - wireshark
           - caffeine
           - procexp
-          - virtualbox-guest-additions-guest.install
+          - vscode
+          - firefox
+          - vscode-powershell
         state: latest
-      when: not debug_playbook | bool
+      # when: not debug_playbook | bool
 
     - name: install the Win32-OpenSSH service
       chocolatey.chocolatey.win_chocolatey:
