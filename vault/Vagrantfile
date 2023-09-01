@@ -14,12 +14,13 @@ Vagrant.configure("2") do |config|
   config.vm.synced_folder home, home
 
   # Networking
+  # This needs to be a hostname, DO NOT set a FQDN here
   config.vm.hostname = "vault"
-  config.vm.network "private_network", ip: "192.168.60.4"
+  config.vm.network "private_network", ip: "192.168.57.4"
 
   # Additional settings to make it more robust
   config.vm.guest = :windows
-  config.winrm.port = 55984 # Make sure that this is correct
+  config.winrm.port = 53984
   config.winrm.max_tries = 20
   config.vm.boot_timeout = 600
   config.winrm.transport = :plaintext
@@ -31,16 +32,16 @@ Vagrant.configure("2") do |config|
   config.windows.halt_timeout = 120
 
   # Export WINRM
-  config.vm.network "forwarded_port", guest: 5985, host: 55984,id:"winrm",auto_correct: false
-  config.vm.network "forwarded_port", guest: 5986, host: 56984,id:"winrms",auto_correct: false
+  config.vm.network "forwarded_port", guest: 5985, host: 53984,id:"winrm",auto_correct: false
+  # config.vm.network "forwarded_port", guest: 5986, host: 54984,id:"winrms",auto_correct: false
   #Export RDP
-  config.vm.network "forwarded_port", guest: 3389, host: 8384, id: "rdp", auto_correct: true
+  config.vm.network "forwarded_port", guest: 3389, host: 8484, id: "rdp", auto_correct: true
   # Export SSH
-  config.vm.network "forwarded_port", guest: 22, host: 2224, id:"ssh", auto_correct: true
+  config.vm.network "forwarded_port", guest: 22, host: 2244, id:"ssh", auto_correct: true
 
   # Customization
   config.vm.provider "virtualbox" do |v|
-    v.name = "vault"
+    v.name = "vault.intern"
     v.gui = false
     v.memory = 2048
     v.customize ["modifyvm", :id, "--draganddrop", "bidirectional"]
@@ -50,10 +51,13 @@ Vagrant.configure("2") do |config|
   end
   config.vm.provision "ansible" do |ansible|
     ansible.playbook = "setup_vault.yml"
+    ansible.compatibility_mode = "2.0"
     # Workaround for winrm_schem
     # See: https://github.com/hashicorp/vagrant/issues/10765
     ansible.host_vars = {
-      "default" => { "ansible_winrm_scheme" => "http" }
+      "default" => { "ansible_winrm_scheme" => "http" ,
+                    "ansible_user" => "vagrant" ,
+                    "ansible_password" => "vagrant" }
     }
   end
 

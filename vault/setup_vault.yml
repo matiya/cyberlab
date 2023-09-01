@@ -1,4 +1,49 @@
 ---
-- import_playbook: tasks/vault_setup_os.yml
-- import_playbook: tasks/vault_prerequisites.yml
-- import_playbook: tasks/vault_install.yml
+- hosts: all
+  gather_facts: true
+  vars:
+    # Password of the local os admin
+    local_admin_password: "CyberArk.123"
+    # vault server package name (downloaded zipfile without extension)
+    server_installer_pkg: "Server-Rls-v13.2"
+    # Path relative to the role folder
+    server_installer: "../../src/installers/Vault/{{server_installer_pkg}}"
+    # Path in the Vault server where the sources and
+    # installers will be copied to
+    sources_path: C:\_sources
+    # Hostname of the VM.
+    vm_hostname: "vault"
+    # Username and password for the built-in cyberark admin
+    vault_username: "administrator"
+    vault_password: "Cyberark1"
+    # Because some ansible scripts require the vault_password to be defined
+    # as a secure string, this variable is set in the individual components
+    master_password: "Cyberark1"
+    vault_ip: 192.168.57.4
+    dr_ip: 192.168.57.3
+    dr_hostname: dr
+    vault_port: 1858
+    # Dotnet installer
+    ndp_pkg: "../../src/third_party/ndp48-x86-x64-allos-enu.exe"
+    # CyberArk does not (yet) distribute a Client v13.0
+    client_package: "../../src/installers/Client-Rls-v12.6.zip"
+    vault_installation_path: "C:\\CyberArk"
+    # Path to the Extracted vault installer
+    vault_media: "{{sources_path}}\\installers\\{{server_installer_pkg}}"
+    client_media: "C:\\_media\\Client-Rls-v12.6"
+    vault_guid: "{BF1F0850-D1C7-11D3-8E83-0000E8EFAFE3}"
+    vault_safes_path: "C:\\PrivateArk\\Safes"
+    vault_license_path: "{{sources_path}}\\license"
+    vault_operatorCD_path: "{{sources_path}}\\operator-cd"
+    # software to be installed on the system
+    chocolatey_packages:
+      - sysinternals
+      - notepadplusplus
+      - powershell-core
+      - bginfo
+      - procexp
+      - microsoft-edge
+
+  roles:
+    # - name: ../roles/matiya.setup_windows_lab
+    - name: ../roles/matiya.vault

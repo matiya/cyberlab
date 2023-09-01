@@ -1,8 +1,28 @@
 # -*- mode:ansible -*-
 ---
-- import_playbook: tasks/psm_setup_os.yml
-- import_playbook: tasks/psm_prerequisites.yml
-- import_playbook: tasks/psm_install.yml
-- import_playbook: tasks/psm_postinstall.yml
-- import_playbook: tasks/psm_hardening.yml
-- import_playbook: tasks/psm_registration.yml
+- hosts: all
+  gather_facts: true
+  vars:
+    vault_username: "administrator"
+    vault_password: "Cyberark1"
+
+    vault_ip: 192.168.57.4
+    dr_ip: 192.168.57.3
+    # CPM Variables
+    # Password of the local os admin
+    local_admin_password: "CyberArk.123"
+    # pvwa package name (name of downloaded zipfile WITHOUT extension)
+    pvwa_hostname: "psm.intern"
+    chocolatey_packages:
+      - sysinternals
+      - notepadplusplus
+      - powershell-core
+      - bginfo
+      - procexp
+      - microsoft-edge
+      - selenium-chromium-edge-driver
+      - autoit
+  roles:
+    - ../roles/matiya.setup_windows_lab
+    - ../roles/matiya.pas_devtools
+    # - ../roles/cpm

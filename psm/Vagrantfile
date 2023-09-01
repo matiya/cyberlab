@@ -15,7 +15,7 @@ Vagrant.configure("2") do |config|
 
   # Networking
   config.vm.hostname = "psm"
-  config.vm.network "private_network", ip: "192.168.60.7"
+  config.vm.network "private_network", ip: "192.168.57.7"
 
   # Additional settings to make it more robust
   config.vm.guest = :windows
@@ -32,7 +32,7 @@ Vagrant.configure("2") do |config|
 
   # Export WINRM
   config.vm.network "forwarded_port", guest: 5985, host: 55987,id:"winrm",auto_correct: false
-  config.vm.network "forwarded_port", guest: 5986, host: 56987,id:"winrms",auto_correct: false
+  config.vm.network "forwarded_port", guest: 5986, host: 56987,id:"winrm-ssl",auto_correct: false
 
   #Export RDP
   config.vm.network "forwarded_port", guest: 3389, host: 8387, id: "rdp", auto_correct: true
@@ -41,7 +41,7 @@ Vagrant.configure("2") do |config|
 
   # Customization
   config.vm.provider "virtualbox" do |v|
-    v.name = "psm"
+    v.name = "psm132"
     v.gui = false
     v.memory = 4096
     v.customize ["modifyvm", :id, "--draganddrop", "bidirectional"] # Enables drag-and-drop between host and guest
@@ -50,6 +50,7 @@ Vagrant.configure("2") do |config|
   end
   config.vm.provision "ansible" do |ansible|
     ansible.playbook = "setup_psm.yml"
+    ansible.compatibility_mode = "2.0"
     # Workaround for winrm_schem
     # See: https://github.com/hashicorp/vagrant/issues/10765
     ansible.host_vars = {
